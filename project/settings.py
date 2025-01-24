@@ -11,7 +11,7 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
 from pathlib import Path
-
+from datetime import timedelta
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -31,13 +31,53 @@ ALLOWED_HOSTS = []
 # Application definition
 
 INSTALLED_APPS = [
+    'loan_app',
+    'accounts',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'rest_framework',
+    'rest_framework_simplejwt',
+
+        # 'rest_framework.authtoken',
+
 ]
+# REST_FRAMEWORK = {
+#     'DEFAULT_AUTHENTICATION_CLASSES': [
+#         'rest_framework.authentication.TokenAuthentication',
+#     ],
+#     'DEFAULT_PERMISSION_CLASSES': [
+#         'rest_framework.permissions.IsAuthenticated',
+#     ],
+# }
+# REST_FRAMEWORK = {
+#     'DEFAULT_AUTHENTICATION_CLASSES': (
+#         'rest_framework_simplejwt.authentication.JWTAuthentication',
+#     )
+# }
+# SIMPLE_JWT={
+#     'ACCESS_TOKEN_LIFETIME':timedelta(days=15),
+#     'REFRESH_TOKEN_LIFETIME':timedelta(days=1),
+#     'BLACKLIST_AFTER_ROTATION':True,
+#     'AUTH_HEADER_TYPES':('Bearer',),
+#     'AUTH_TOKEN_CLASSES':('rest_framework_simplejwt.tokens.AccessToken',),
+# }
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    )
+}
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=15),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    'BLACKLIST_AFTER_ROTATION': True,
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
+}
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -48,6 +88,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+MIDDLEWARE += ['loan_app.middlewares.CleanURLMiddleware']
 
 ROOT_URLCONF = 'project.urls'
 
@@ -121,3 +162,33 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+# celery
+
+CELERY_RESULT_BACKEND = "redis://localhost:6379/0"
+CELERY_BROKER_URL = "redis://localhost:6379/0"
+# CELERY_BEAT_SCHEDULE = {
+#     'process-payments-every-hour': {
+#         'task': 'loan_app.tasks.process_payment_task',
+#         'schedule': 3600.0,  
+#     },
+# }
+CELERY_BEAT_SCHEDULE = {
+    'process-payments-every-hour': {
+        'task': 'loan_app.tasks.process_payments_every_hour',  # Use the correct task name here
+        'schedule': 3600.0,  # Run every hour (3600 seconds)
+    },
+}
+
+
+
+CACHES = {
+'default': {
+
+'BACKEND': 'django_redis.cache.RedisCache',
+'LOCATION': 'redis://127.0.0.1:6379/1',
+'OPTIONS':{
+'CLIENT CLASS': 'django_redis.client.DefaultClient'
+}
+}}
