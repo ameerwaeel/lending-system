@@ -168,19 +168,16 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 CELERY_RESULT_BACKEND = "redis://localhost:6379/0"
 CELERY_BROKER_URL = "redis://localhost:6379/0"
-# CELERY_BEAT_SCHEDULE = {
-#     'process-payments-every-hour': {
-#         'task': 'loan_app.tasks.process_payment_task',
-#         'schedule': 3600.0,  
-#     },
-# }
+
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+
 CELERY_BEAT_SCHEDULE = {
     'process-payments-every-hour': {
         'task': 'loan_app.tasks.process_payments_every_hour',  # Use the correct task name here
         'schedule': 3600.0,  # Run every hour (3600 seconds)
     },
 }
-
 
 
 CACHES = {

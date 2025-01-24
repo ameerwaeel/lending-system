@@ -12,8 +12,7 @@ from django.http import JsonResponse
 from loan_app.tasks import process_payment_task
 from celery.result import AsyncResult
 from django.core.cache import cache
-
-
+import logging
 
 class LoanRequestView(APIView):
     permission_classes = [IsAuthenticated]
@@ -50,14 +49,13 @@ class LoanListView(APIView):
             cache.set(cache_key, loans, timeout=3600)
 
         return Response(LoanSerializer(loans, many=True).data)
-
+    
+from django.db import transaction
 
 class OfferLoanView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, loan_id):
-
-
         if not request.user.is_authenticated:
             return Response({"error": "User is not authenticated."}, status=status.HTTP_401_UNAUTHORIZED)
 
@@ -70,27 +68,36 @@ class OfferLoanView(APIView):
             loan = Loan.objects.get(id=loan_id, status='pending')
         except Loan.DoesNotExist:
             return JsonResponse({'error': 'Loan not found or not pending'}, status=404)
-        if lender.balance < loan.total_amount_due() + Decimal('3.75'):
+
+        # Verify lender balance
+        total_due = loan.total_amount_due() + Decimal('3.75')
+        if lender.balance < total_due:
             return Response({"error": "Insufficient balance."}, status=status.HTTP_400_BAD_REQUEST)
 
-        loan.lender = lender
-        loan.status = 'funded'
-        loan.funded_at = now()
-        loan.save()
+        try:
+            with transaction.atomic():
+                loan.lender = lender
+                loan.status = 'funded'
+                loan.funded_at = now()
+                loan.save()
 
-        lender.balance -= loan.total_amount_due() + Decimal('3.75')
-        lender.save()
+                lender.balance -= total_due
+                lender.save()
 
-        for month in range(loan.term_in_months):
-            Payment.objects.create(
-                loan=loan,
-                amount=loan.total_amount_due() / loan.term_in_months,
-                due_date=now() + timedelta(days=30 * (month + 1))
-            )
-   
+                for month in range(loan.term_in_months):
+                    Payment.objects.create(
+                        loan=loan,
+                        amount=loan.total_amount_due() / loan.term_in_months,
+                        due_date=now() + timedelta(days=30 * (month + 1))
+                    )
+                
+        except Exception as e:
+            logging.error(f"Error while processing loan offer: {str(e)}")
+            return Response({"error": "An error occurred while processing the loan."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response(LoanSerializer(loan).data)
-    
+
+
 
 
 
@@ -102,16 +109,15 @@ class MakePaymentView(APIView):
 
         try:
             result = AsyncResult(task.id)
-            result_data = result.get(timeout=10)  
+            result_data = result.get(timeout=30)  
         except Exception as e:
+            logging.error(f"Error processing payment task: {str(e)}")
             return Response({"error": "Task processing failed.", "details": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         if "error" in result_data:
             return Response({"error": result_data["error"]}, status=status.HTTP_400_BAD_REQUEST)
 
         return Response(result_data, status=status.HTTP_200_OK)
-
-
 
 
 class LoanDetailView(APIView):
